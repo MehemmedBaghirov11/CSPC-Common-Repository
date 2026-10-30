@@ -161,3 +161,37 @@ I used two checks: the Shapiro-Wilk test (numerical) and Q-Q plots (graphical, s
 - I used `value_counts(normalize=True)` and the Shannon entropy (in bits; 1.0 means perfectly balanced and hardest to guess, 0 means completely predictable), plus the accuracy of always guessing the most common category.
 - `target`: 54.1% are 0 (healthy) and 45.9% are 1 (disease). Entropy = 0.995 bits, almost the maximum, so the column is very balanced and hard to guess: always answering "0" is right only 54.1% of the time.
 - `sex`: 68.0% are coded 1 and 32.0% are coded 0. Entropy = 0.905 bits, so it is more lopsided and easier to guess: always answering "1" is right 68.0% of the time.
+
+---
+
+## PW4: Machine Learning, Supervised and Unsupervised
+
+### Session A: Concrete strength (code: `PW4/fetch_concrete.py`, `PW4/sessionA.py`)
+
+Dataset: UCI Concrete Compressive Strength, I-Cheng Yeh (1998), "Modeling of strength of high-performance concrete using artificial neural networks", Cement and Concrete Research 28(12). DOI of the dataset: 10.24432/C5PK67. It has 1030 laboratory tests, 8 inputs and 1 output, with no missing values.
+
+**A1, variables and units:**
+
+| name in my code | original name | unit |
+|---|---|---|
+| cement | Cement | kg/m^3 |
+| slag | Blast Furnace Slag | kg/m^3 |
+| ash | Fly Ash | kg/m^3 |
+| water | Water | kg/m^3 |
+| superplastic | Superplasticizer | kg/m^3 |
+| coarse_agg | Coarse Aggregate | kg/m^3 |
+| fine_agg | Fine Aggregate | kg/m^3 |
+| age | Age | day |
+| strength (target) | Concrete compressive strength | MPa |
+
+I renamed the columns by position and checked that the order matches the `variables` table printed by `fetch_ucirepo`. The download is kept in `fetch_concrete.py`, which saves `data/concrete.csv`, so `sessionA.py` works without internet.
+
+**A2, cleaning:**
+- 25 duplicate rows and 0 missing values were found. After `drop_duplicates()` 1005 rows remain.
+- Why duplicates are a problem: after a random split one copy of a row can land in the training set and the other in the test set. The model has then already seen that exact row, so the test score is too optimistic and does not measure how well the model handles new mixes.
+- Scales (from `describe()`): `coarse_agg` (mean 974) and `fine_agg` (mean 773) are measured in hundreds, `cement` in hundreds (mean 279), while `superplastic` has a mean of only 6.0. `age` has a mean of 46 but ranges from 1 to 365 days. This matters for the polynomial features and for KNN, which compares raw distances.
+- Strength vs cement (see `results/A2_scatter.png`): <describe your own plot, for example: strength tends to rise with cement, but the points form a wide cloud, so cement alone does not determine strength>.
+- Strength vs age (see `results/A2_scatter.png`): <describe your own plot, for example: strength rises quickly in the first weeks and then flattens, which looks like a logarithmic curve>.
+
+**A3, split:**
+- `train_test_split(test_size=0.2, random_state=42)` gives 804 training rows and 201 test rows. Every model and scaler is fitted on the training part only.
