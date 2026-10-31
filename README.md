@@ -21,31 +21,6 @@ pytest -v
 
 ---
 
-## PW1 — Lab A: Reproducible Foundations
-
-**What I built:**
-- <one or two lines: the CSPC repo, the environment, the decay simulation, the tests>
-
-**Speed comparison (loop vs NumPy):**
-
-| version | time (s) |
-|---------|----------|
-| pure-Python loop | ... |
-| NumPy (vectorised) | ... |
-
-- Speed-up: **... × faster**
-
-**Tests:** all passing? (yes / no)
-
-**Conclusion:**
-- <2–3 sentences: what worked, what you learned, any problems you hit and how you solved them>
-
----
-
-<!-- Future sessions: add a new "## PW<n> — Lab <X>" section below. -->
-
----
-
 ## PW1 - Lab A: Reproducible Foundations
 
 **What I built:**
@@ -190,8 +165,111 @@ I renamed the columns by position and checked that the order matches the `variab
 - 25 duplicate rows and 0 missing values were found. After `drop_duplicates()` 1005 rows remain.
 - Why duplicates are a problem: after a random split one copy of a row can land in the training set and the other in the test set. The model has then already seen that exact row, so the test score is too optimistic and does not measure how well the model handles new mixes.
 - Scales (from `describe()`): `coarse_agg` (mean 974) and `fine_agg` (mean 773) are measured in hundreds, `cement` in hundreds (mean 279), while `superplastic` has a mean of only 6.0. `age` has a mean of 46 but ranges from 1 to 365 days. This matters for the polynomial features and for KNN, which compares raw distances.
-- Strength vs cement (see `results/A2_scatter.png`): <describe your own plot, for example: strength tends to rise with cement, but the points form a wide cloud, so cement alone does not determine strength>.
-- Strength vs age (see `results/A2_scatter.png`): <describe your own plot, for example: strength rises quickly in the first weeks and then flattens, which looks like a logarithmic curve>.
+- Strength vs cement (see `results/A2_scatter.png`): strength tends to rise with cement, but the points form a wide cloud, so cement alone does not determine strength. For cement above 400 kg/m^3 the strength still ranges from about 25 to 80 MPa, because age and the other ingredients also matter.
+- Strength vs age (see `results/A2_scatter.png`): age takes only a few values (1, 3, 7, 14, 28, 56, 90, 100, 180, 270, 365 days), so the points form vertical stripes. Strength rises sharply from the first days (mostly below 40 MPa) to 28 days (up to about 80 MPa) and then does not keep rising: at later ages it stays between about 25 and 80 MPa. This fast growth followed by flattening looks like a logarithmic curve and not a straight line, and the large spread at each age shows that the other ingredients matter too. The bonus later supports this: using log(age) raised the test R2 from 0.58 to 0.80.
 
 **A3, split:**
 - `train_test_split(test_size=0.2, random_state=42)` gives 804 training rows and 201 test rows. Every model and scaler is fitted on the training part only.
+
+**A4, linear regression (`results/A4_linear_metrics.csv`, `results/A4_residuals_age.png`):**
+
+strength (MPa) = -23.39 + 0.1167 cement + 0.0981 slag + 0.0846 ash - 0.1314 water + 0.3315 superplastic + 0.01552 coarse_agg + 0.02065 fine_agg + 0.1106 age
+
+The intercept is in MPa, the ingredient coefficients are in MPa per kg/m^3, and the age coefficient is in MPa per day.
+
+| metric | value |
+|---|---|
+| train RMSE | 10.00 MPa |
+| test RMSE | 11.19 MPa |
+| test MAE | 8.90 MPa |
+| train R2 | 0.610 |
+| train adjusted R2 | 0.606 |
+| test R2 | 0.580 |
+
+- Signs agree with physics: water lowers strength; cement, slag, ash, superplasticizer and age raise it. Train and test R2 are both low and close, so the model underfits (a straight line is too simple).
+- Residuals vs age (log axis): the residuals do not scatter randomly around zero, they form an arch. At 1 to 7 days they are negative (down to about -27 MPa), so the model over-predicts young concrete. From 14 to 100 days they are mostly positive (up to about +35 MPa at 28 days), so the model under-predicts. At 180 to 365 days they are negative again (down to about -24 MPa). A systematic pattern in the residuals means the shape of the model is wrong, not just that the data is noisy: a straight line in age cannot follow the curved growth of strength, so a better-shaped model (for example one using log(age)) can improve it.
+
+**A5, polynomial regression (`results/A5_poly.csv`):**
+
+| degree | p | train RMSE | test RMSE | train R2 | train adj R2 | test R2 |
+|---|---|---|---|---|---|---|
+| 1 | 8 | 10.00 | 11.19 | 0.610 | 0.606 | 0.580 |
+| 2 | 44 | 6.99 | 8.31 | 0.809 | 0.798 | 0.769 |
+| 3 | 164 | 4.40 | 5.95 | 0.925 | 0.905 | 0.881 |
+| 4 | 494 | 2.33 | 39.41 | 0.979 | 0.945 | -4.206 |
+
+- I would choose degree 3: it has the lowest test RMSE and highest test R2, and the train-test gap is moderate. Degree 2 is simpler but clearly worse on test. (Choosing by the test score makes that score slightly optimistic.)
+- At degree 4 there are 494 features for only 804 training rows, so the model can almost memorise the training set: train R2 is 0.979, but test R2 is -4.2, worse than always predicting the mean.
+- Adjusted R2 does not protect me: it is computed on the training data and is still 0.945 at degree 4. Only the test set revealed the problem.
+
+**A6, KNN (`results/A6_knn_sweep.csv`, `results/A6_knn_K.png`):**
+- Class balance: 64.2% of mixes are below 40 MPa and 35.8% reach it.
+- K=7 gave the highest test accuracy (0.836) with a train-test gap of 0.057. K=1 memorises the training set (train 0.998, test 0.831). For large K the model becomes too smooth and both accuracies fall (K=101: 0.757 / 0.736).
+- With the scaler 0.836, without 0.821.
+- Five splits (random_state 0 to 4): 0.801, 0.851, 0.821, 0.836, 0.806; mean 0.823, std 0.019. The scaler difference (0.015) and the differences between K=1 to 25 are inside this spread, so they are not meaningful. Only K=51 and K=101 are clearly worse. Scaling is still correct in principle, because without it the large-scale columns (aggregates, in hundreds) dominate the distance.
+
+**A6, decision tree (`results/A6_tree_sweep.csv`, `results/A6_tree_depth.png`):**
+
+| max_depth | leaves | train acc | test acc |
+|---|---|---|---|
+| 1 | 2 | 0.755 | 0.701 |
+| 2 | 4 | 0.755 | 0.701 |
+| 3 | 8 | 0.840 | 0.796 |
+| 4 | 16 | 0.869 | 0.826 |
+| 5 | 26 | 0.889 | 0.846 |
+| 6 | 38 | 0.930 | 0.841 |
+| 8 | 61 | 0.973 | 0.856 |
+| None | 80 | 0.998 | 0.881 |
+
+- The train-test gap is about 0.04 to 0.05 up to depth 5 and then grows to 0.09 (depth 6) and 0.12 (depth 8 and None).
+- I chose depth 5 (26 leaves): the gap is still small and the tree is short enough to read. The unlimited tree has higher test accuracy (0.881) but 80 leaves, and it is too big to read and nearly memorises the training data. I gain readability and a smaller gap; I lose about 3.5 points of test accuracy.
+- Root question: `age <= 42` days. This makes physical sense: young concrete has not finished curing, so age is the first thing that separates strong from weak mixes. The next questions are about cement, water and superplasticizer.
+
+**A7, metrics (`results/A_metrics.csv`, `results/A7_thresholds.csv`):** positive class = reaches 40 MPa.
+
+| model | TP | FP | FN | TN | accuracy | precision | recall | F1 |
+|---|---|---|---|---|---|---|---|---|
+| KNN K=7 | 54 | 15 | 18 | 114 | 0.836 | 0.783 | 0.750 | 0.766 |
+| Tree depth 5 | 58 | 17 | 14 | 112 | 0.846 | 0.773 | 0.806 | 0.789 |
+
+- The dangerous mistake is FP: the model says the mix reaches 40 MPa but it does not, so a weak structure could be built. Precision controls it. A FN only wastes a good mix.
+- KNN thresholds (with K=7 the probability can only be a multiple of 1/7, so 0.9 means all 7 neighbours must agree):
+
+| threshold | TP | FP | FN | TN | precision | recall |
+|---|---|---|---|---|---|---|
+| 0.3 | 61 | 23 | 11 | 106 | 0.726 | 0.847 |
+| 0.5 | 54 | 15 | 18 | 114 | 0.783 | 0.750 |
+| 0.7 | 39 | 11 | 33 | 118 | 0.780 | 0.542 |
+| 0.9 | 18 | 1 | 54 | 128 | 0.947 | 0.250 |
+
+- For a safety-critical use I choose 0.9: only 1 of 19 approved mixes is wrong. The price is recall of 0.25: 54 of the 72 mixes that really reach 40 MPa are rejected. Going from 0.5 to 0.7 is not worth it (precision stays about 0.78 while recall drops a lot). With only 19 approved mixes the 0.947 is uncertain.
+
+**A8, feature importance (`results/A8_importance.csv`, `results/A8_importance.png`):**
+
+| input | raw coef | standardised coef | tree importance | perm. KNN | perm. tree |
+|---|---|---|---|---|---|
+| cement | 0.117 | 12.12 | 0.253 | 0.165 | 0.170 |
+| slag | 0.098 | 8.44 | 0.036 | 0.055 | 0.009 |
+| ash | 0.085 | 5.44 | 0.037 | 0.016 | 0.000 |
+| water | -0.131 | -2.83 | 0.095 | 0.068 | 0.012 |
+| superplastic | 0.331 | 1.97 | 0.164 | 0.066 | 0.188 |
+| coarse_agg | 0.016 | 1.20 | 0.011 | 0.038 | 0.002 |
+| fine_agg | 0.021 | 1.67 | 0.091 | 0.081 | 0.072 |
+| age | 0.111 | 6.89 | 0.313 | 0.176 | 0.165 |
+
+- Raw ranking puts superplastic first and cement third; the standardised ranking puts cement first and superplastic sixth. The raw coefficients have different units, and superplastic varies very little (std about 6 kg/m^3), so a large coefficient per kg/m^3 gives a small effect over its real range. The standardised coefficient multiplies by the standard deviation, so it measures the effect over the typical range.
+- The methods mostly agree that cement and age are among the top inputs (tree: age, cement; permutation KNN: age, cement; permutation tree: superplastic, cement, age). Ash is used by the tree (0.037) but its permutation importance is 0.000, so shuffling it does not hurt the test score.
+- Engineers' claim: partly consistent. Age and cement rank high. Water ranks only in the middle, but the water-to-cement ratio is not an input, and its effect is shared between water and cement. In the bonus, adding water/binder gave almost no extra gain.
+- A high importance does not mean that changing the ingredient would change the strength. Importance only says how much the model relies on the input. The data are observational and the inputs are correlated (mix designers change several together, for example superplasticizer is used to reduce water), exactly the correlation-versus-causation problem from PW3.
+
+**Bonus, physics-chosen features:**
+
+| model | features | test R2 |
+|---|---|---|
+| plain linear | 8 | 0.580 |
+| log(age) | 8 | 0.804 |
+| log(age) and water/binder | 8 | 0.806 |
+| polynomial degree 2 | 44 | 0.769 |
+| polynomial degree 3 | 164 | 0.881 |
+
+- Replacing age by log(age) raised test R2 from 0.58 to 0.80 with no extra features, and it beats the degree-2 polynomial that uses 44 features. The water/binder ratio added only 0.003, which is within noise for a single split. Degree 3 is higher but needs 164 features. A little domain knowledge (strength grows with log of age) gave most of the gain much more cheaply than model flexibility.
