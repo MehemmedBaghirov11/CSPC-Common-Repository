@@ -1,0 +1,20 @@
+rule all:
+    input:
+        "results/A_metrics.csv",
+        "results/B_agreement.csv"
+
+rule fetch:
+    output: "data/concrete.csv"
+    shell: "python fetch_concrete.py"
+
+rule session_a:
+    input:
+        "data/concrete.csv",
+        "sessionA.py"
+    output: "results/A_metrics.csv"
+    shell: "python sessionA.py"
+
+rule session_b:
+    input: "sessionB.py"
+    output: "results/B_agreement.csv"
+    shell: "python sessionB.py"

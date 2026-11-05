@@ -273,3 +273,67 @@ The intercept is in MPa, the ingredient coefficients are in MPa per kg/m^3, and 
 | polynomial degree 3 | 164 | 0.881 |
 
 - Replacing age by log(age) raised test R2 from 0.58 to 0.80 with no extra features, and it beats the degree-2 polynomial that uses 44 features. The water/binder ratio added only 0.003, which is within noise for a single split. Degree 3 is higher but needs 164 features. A little domain knowledge (strength grows with log of age) gave most of the gain much more cheaply than model flexibility.
+
+### Session B: Wine chemistry (code: `PW4/sessionB.py`)
+
+Dataset: UCI Wine recognition data (Forina et al., PARVUS, Institute of Pharmaceutical and Food Analysis and Technologies, Genoa), loaded with `sklearn.datasets.load_wine`. It has 178 wines from the same region of Italy, from three cultivars (59, 71 and 48 wines), with 13 chemical measurements each and no missing values. The cultivar labels were set aside until B6.
+
+**B1, the measurements:** alcohol, malic acid, ash, alcalinity of ash, magnesium, total phenols, flavanoids, nonflavanoid phenols, proanthocyanins, colour intensity, hue, OD280/OD315 of diluted wines and proline. The largest scales are proline (std 315, range 1402) and magnesium (std 14.3, range 92); the smallest are nonflavanoid phenols (std 0.12), hue (std 0.23) and ash (std 0.27).
+
+**B2, PCA on raw data:** PC1 carries 99.8% of the variance and its loading on proline is 0.9998 (magnesium 0.018, all others below 0.005). PCA does not rescale, and proline has by far the largest variance (std 315 against 14 for magnesium and below 4 for the rest), so the component that maximises variance simply follows proline. I would not accept this PC1 as "the main chemical difference between the wines": it only reflects the units of the measurements.
+
+**B3, scaled PCA (`results/B3_scree.png`, `results/B3_loadings.csv`, `results/B3_variance.csv`):**
+- After `StandardScaler` every column has mean 0 and std 1. Explained variance: PC1 0.362, PC2 0.192, PC3 0.111, PC4 0.071, PC5 0.066, PC6 0.049, PC7 0.042, PC8 0.027, PC9 0.022, PC10 0.019, PC11 0.017, PC12 0.013, PC13 0.008. Cumulative: 0.362, 0.554, 0.665, 0.736, 0.802, 0.851, 0.893, 0.920, ...
+- 8 components are needed to keep 90% (7 give 89.3%). The PC1-PC2 plane keeps 55.4%.
+- PC1 positive side: flavanoids (0.42), total phenols (0.39), OD280/OD315 (0.38), proanthocyanins (0.31), hue (0.30), proline (0.29). Negative side: nonflavanoid phenols (-0.30), malic acid (-0.25), alcalinity of ash (-0.24). So PC1 separates phenol-rich wines (many flavanoids and phenols, high OD280, low malic acid) from phenol-poor wines.
+- PC2 positive side: colour intensity (0.53), alcohol (0.48), proline (0.36), ash (0.32), magnesium (0.30). Negative side: hue (-0.28), OD280/OD315 (-0.16). So PC2 separates strong, dark, alcoholic wines from lighter ones.
+- In the single-colour PC1-PC2 scatter (`results/B3_pc_scatter.png`) I would guess three groups by eye, and the K-Means result in B6 agrees with this.
+
+**B4, K-Means (`results/B4_elbow.png`, `results/B4_inertia.csv`):**
+- (a) With k=3 and `n_init=1`, the inertia depends on the random starting centres: 1277.93 (seeds 0, 2, 3), 1278.76 (seeds 1, 5, 7), 1279.97 (seed 4) and 1282.46 (seed 6). K-Means only finds a local minimum, and a bad start can end in a worse one. `n_init=10` repeats the whole run from 10 different starts and keeps the lowest inertia, so the result no longer depends on one lucky or unlucky start.
+- (b) Inertia for k = 1 to 10: 2314.0, 1659.0, 1277.9, 1180.7, 1110.4, 1044.5, 996.0, 944.6, 913.2, 864.6. The drops are large up to k=3 (655, then 381) and small afterwards (97, 70, 66, 49, ...), so the elbow is at **k = 3**. I did not use the cultivars to choose k.
+- I cannot choose k by minimising the inertia, because it always decreases when k grows (with k = 178 every wine is its own cluster and the inertia is 0), so the minimum would always select the largest k and say nothing about the real structure.
+
+**B5, the clusters (`results/B5_centres.csv`, `results/B5_clusters.png`):** sizes are 65, 51 and 62. Centres in real units, main differences:
+
+| measurement | cluster 0 | cluster 1 | cluster 2 |
+|---|---|---|---|
+| alcohol | 12.25 | 13.13 | 13.68 |
+| malic acid | 1.90 | 3.31 | 2.00 |
+| flavanoids | 2.05 | 0.82 | 3.00 |
+| colour intensity | 2.97 | 7.23 | 5.45 |
+| hue | 1.06 | 0.69 | 1.07 |
+| OD280/OD315 | 2.80 | 1.70 | 3.16 |
+| proline | 510 | 619 | 1100 |
+
+- Cluster 0 (65 wines): light wines with the lowest alcohol (12.3), pale colour (intensity 3.0) and low proline (510).
+- Cluster 1 (51 wines): dark, phenol-poor wines: highest colour intensity (7.2), most malic acid (3.3), very few flavanoids (0.82), lowest hue (0.69) and OD280 (1.7).
+- Cluster 2 (62 wines): rich wines with the highest proline (1100), highest alcohol (13.7) and the most flavanoids (3.0).
+
+**B6, the reveal (`results/B_agreement.csv`):**
+
+| version (k=3) | agreement |
+|---|---|
+| (i) scaled data | 0.966 |
+| (ii) raw, unscaled data | 0.702 |
+| (iii) first two PCs of scaled data | 0.966 |
+
+- (i) 172 of 178 wines are in the cluster of their cultivar. Cultivar 0 is cluster 2 (59 of 59), cultivar 1 is cluster 0 (65 of 71) and cultivar 2 is cluster 1 (48 of 48).
+- (ii) Raw data gives only 0.702. As in B2, the distances are almost entirely determined by proline (and a little magnesium), because they have the largest numbers, so K-Means effectively clusters on one measurement, and the cultivars overlap in proline. Scaling gives every measurement a comparable weight.
+- (iii) The first two PCs give the same score (0.966) as all 13 scaled measurements, even though they keep only 55.4% of the variance (6 wines are misplaced in both cases). The three groups are visible in the leading components; the remaining variance is not needed to separate them.
+- K-Means never saw the cultivars, yet it recovers 96.6% of them, so the three grape varieties have clearly different chemical profiles (phenols and flavanoids, colour, proline and alcohol).
+
+**Bonus, what do labels buy you?** Both KNN models (scaled with 13 features, and scaled with 2 PCs) have a test accuracy of 0.933 (42 of 45 test wines). This is lower than the unsupervised agreement (0.966), but the comparison is not completely fair: the agreement is measured on all 178 wines, including those K-Means was fitted on, and each cluster is matched to its best cultivar after seeing the labels, which is optimistic. The supervised accuracy comes from 45 unseen wines in a single split, where one wine is 2.2 percentage points, and the models had to learn from the labels.
+
+### B7: Automating PW4 with Snakemake (`PW4/Snakefile`)
+
+The Snakefile has four rules: `all` (input: `results/A_metrics.csv` and `results/B_agreement.csv`), `fetch` (output: `data/concrete.csv`), `session_a` (inputs: `data/concrete.csv` and `sessionA.py`, output: `results/A_metrics.csv`) and `session_b` (input: `sessionB.py`, output: `results/B_agreement.csv`).
+
+The one command that reproduces all of PW4:
+
+    cd PW4 && snakemake --cores 1
+
+1. **`snakemake -n` (dry run):** it printed the plan without running anything. It planned `session_a` ("Updated input files: sessionA.py", because I had just edited the script) and `all`, but not `fetch` and `session_b`, whose outputs already existed and were newer than their inputs.
+2. **After deleting `data/` and `results/` and running `snakemake --cores 1`:** all 4 jobs ran (4 of 4 steps). Snakemake created the folders itself and worked backwards from `all`: `fetch` ran before `session_a`, because `session_a` needs `data/concrete.csv`. `session_b` has no dependency on the other rules, so it could run at any point. The numbers were identical to my manual runs (for example test R2 0.580 and agreement 0.966).
+3. **Running the same command again:** Snakemake printed "Nothing to be done (all requested files are present and up to date)". Every output file exists and no input file is newer than its output, so no rule needs to run.
+4. **After changing `K_CHOSEN` from 7 to 5 in `sessionA.py`:** only `session_a` (reason: "Updated input files: sessionA.py") and `all` (reason: "Input files updated by another job: results/A_metrics.csv") reran. `fetch` did not rerun because it has no input files and `data/concrete.csv` still exists, so there is nothing that could be newer than its output. `session_b` did not rerun because `sessionB.py` was not changed. I then set `K_CHOSEN` back to 7 and ran Snakemake again so that all results in this README match the final code.
